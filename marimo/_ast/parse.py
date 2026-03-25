@@ -525,7 +525,9 @@ class Parser:
             # File has syntax errors — use scanner to recover individual cells.
             # Never re-raise: parse_notebook must return a best-effort result
             # so --watch and IPC are never broken by a syntax error.
-            nodes, scanner_lines = _scan_parse_fallback(
+            from marimo._ast.scanner import scan_parse_fallback
+
+            nodes, scanner_lines = scan_parse_fallback(
                 self.extractor.contents or "", self.filepath
             )
             self._scanner_generated_lines = scanner_lines
@@ -1158,15 +1160,6 @@ def parse_notebook(
         violations=violations,
         filename=filepath,
     )
-
-
-def _scan_parse_fallback(
-    source: str, filepath: str
-) -> tuple[list[ast.stmt], frozenset[int]]:
-    """When ast.parse() fails, use scanner to recover individual cells."""
-    from marimo._ast.scanner import scan_parse_fallback
-
-    return scan_parse_fallback(source, filepath)
 
 
 # Violation message constants
