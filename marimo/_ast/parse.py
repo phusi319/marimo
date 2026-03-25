@@ -1162,7 +1162,7 @@ def parse_notebook(
 
 def _scan_parse_fallback(
     source: str, filepath: str
-) -> tuple[list[Node], frozenset[int]]:
+) -> tuple[list[ast.stmt], frozenset[int]]:
     """When ast.parse() fails, use scanner to recover individual cells."""
     from marimo._ast.scanner import scan_parse_fallback
 

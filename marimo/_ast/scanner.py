@@ -554,8 +554,29 @@ def _build_unparsable_node(
 
 def _build_run_guard_node(start_line: int) -> ast.If:
     """Build a synthetic if __name__ == "__main__": app.run() node."""
-    tree = ast.parse('if __name__ == "__main__": app.run()')
-    node = tree.body[0]
+    # Equivalent to: if __name__ == "__main__": app.run()
+    node = ast.If(
+        test=ast.Compare(
+            left=ast.Name(id="__name__", ctx=ast.Load()),
+            ops=[ast.Eq()],
+            comparators=[ast.Constant(value="__main__")],
+        ),
+        body=[
+            ast.Expr(
+                value=ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Name(id="app", ctx=ast.Load()),
+                        attr="run",
+                        ctx=ast.Load(),
+                    ),
+                    args=[],
+                    keywords=[],
+                )
+            )
+        ],
+        orelse=[],
+    )
+    ast.fix_missing_locations(node)
     ast.increment_lineno(node, start_line - 1)
     return node
 
