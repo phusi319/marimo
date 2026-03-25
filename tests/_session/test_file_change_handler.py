@@ -401,9 +401,9 @@ async def test_file_change_coordinator_handles_syntax_errors(
 
     result = await coordinator.handle_change(test_file, session=mock_session)
 
-    # Should not handle due to error
-    assert not result.handled
-    assert result.error is not None
+    # Should handle using best-effort scanner fallback (never re-raises syntax errors)
+    assert result.handled
+    assert result.error is None
 
 
 async def test_file_change_coordinator_path_mismatch(
