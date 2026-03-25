@@ -1,9 +1,15 @@
 # Copyright 2026 Marimo. All rights reserved.
 from __future__ import annotations
 
+import os
 import textwrap
+from pathlib import Path
 
-from marimo._ast.scanner import scan_notebook
+from marimo._ast.load import get_notebook_status
+from marimo._ast.parse import parse_notebook
+from marimo._ast.scanner import scan_notebook, scan_parse_fallback
+from marimo._lint.rule_engine import RuleEngine
+from marimo._schemas.serialization import UnparsableCell
 
 
 class TestScanNotebook:
@@ -218,9 +224,6 @@ class TestScanParseIntegration:
 
     @staticmethod
     def test_syntax_error_in_one_cell() -> None:
-        from marimo._ast.parse import parse_notebook
-        from marimo._schemas.serialization import UnparsableCell
-
         source = textwrap.dedent('''\
             import marimo
             __generated_with = "0.1.0"
@@ -257,9 +260,6 @@ class TestScanParseIntegration:
 
     @staticmethod
     def test_syntax_errors_in_all_cells() -> None:
-        from marimo._ast.parse import parse_notebook
-        from marimo._schemas.serialization import UnparsableCell
-
         source = textwrap.dedent('''\
             import marimo
             __generated_with = "0.1.0"
@@ -289,8 +289,6 @@ class TestScanParseIntegration:
         """A file without cell boundaries that has a syntax error should not
         raise — parse_notebook returns a best-effort result so watch/IPC
         are never broken by a syntax error."""
-        from marimo._ast.parse import parse_notebook
-
         source = '# Not a marimo file\nprint("hello world\n'
         # Should not raise; returns a non-valid notebook
         result = parse_notebook(source)
@@ -299,8 +297,6 @@ class TestScanParseIntegration:
 
     @staticmethod
     def test_valid_notebook_unchanged() -> None:
-        from marimo._ast.parse import parse_notebook
-
         source = textwrap.dedent("""\
             import marimo
             __generated_with = "0.1.0"
@@ -327,8 +323,6 @@ class TestScanParseIntegration:
 
     @staticmethod
     def test_cell_names_preserved() -> None:
-        from marimo._ast.parse import parse_notebook
-
         source = textwrap.dedent("""\
             import marimo
             __generated_with = "0.1.0"
@@ -356,9 +350,6 @@ class TestScanParseIntegration:
     def test_unparsable_cell_body_extraction() -> None:
         """Unparsable cells should contain only body code,
         not decorator/def/return."""
-        from marimo._ast.parse import parse_notebook
-        from marimo._schemas.serialization import UnparsableCell
-
         source = textwrap.dedent("""\
             import marimo
             __generated_with = "0.1.0"
@@ -385,9 +376,6 @@ class TestScanParseIntegration:
     @staticmethod
     def test_unparsable_cell_empty_body() -> None:
         """A cell with only a broken return becomes empty."""
-        from marimo._ast.parse import parse_notebook
-        from marimo._schemas.serialization import UnparsableCell
-
         source = textwrap.dedent("""\
             import marimo
             __generated_with = "0.1.0"
@@ -409,9 +397,6 @@ class TestScanParseIntegration:
     @staticmethod
     def test_unparsable_cell_multiline_signature() -> None:
         """Multi-line def signature is properly stripped."""
-        from marimo._ast.parse import parse_notebook
-        from marimo._schemas.serialization import UnparsableCell
-
         source = textwrap.dedent("""\
             import marimo
             __generated_with = "0.1.0"
@@ -436,9 +421,6 @@ class TestScanParseIntegration:
     @staticmethod
     def test_unparsable_cell_decorator_with_args() -> None:
         """Decorator with arguments is properly stripped."""
-        from marimo._ast.parse import parse_notebook
-        from marimo._schemas.serialization import UnparsableCell
-
         source = textwrap.dedent("""\
             import marimo
             __generated_with = "0.1.0"
@@ -461,10 +443,6 @@ class TestScanParseIntegration:
     @staticmethod
     def test_parse_error_in_notebook_file() -> None:
         """Test the actual _test_parse_error_in_notebook.py file."""
-        import os
-
-        from marimo._ast.load import get_notebook_status
-
         filepath = os.path.join(
             os.path.dirname(os.path.realpath(__file__)),
             "codegen_data/_test_parse_error_in_notebook.py",
@@ -482,11 +460,6 @@ class TestScanParseIntegration:
         The scanner should recover the cell as unparsable and find
         the run guard.
         """
-        import os
-
-        from marimo._ast.load import get_notebook_status
-        from marimo._schemas.serialization import UnparsableCell
-
         filepath = os.path.join(
             os.path.dirname(os.path.realpath(__file__)),
             "codegen_data/_test_line_continuation_at_eof.py",
@@ -501,8 +474,6 @@ class TestScanParseIntegration:
     def test_scanner_generated_lines_typed() -> None:
         """scan_parse_fallback returns a frozenset of scanner-generated line
         numbers — no untyped AST attribute is used."""
-        from marimo._ast.scanner import scan_parse_fallback
-
         source = textwrap.dedent("""\
             import marimo
             __generated_with = "0.1.0"
@@ -535,8 +506,6 @@ class TestScanParseIntegration:
     def test_scanner_generated_lines_existing_unparsable_not_flagged() -> None:
         """Pre-existing app._unparsable_cell() in source must NOT appear in
         scanner_generated_lines — only cells the scanner itself created."""
-        from marimo._ast.scanner import scan_parse_fallback
-
         # This source parses fine (ast.parse succeeds), so scan_parse_fallback
         # returns ([], frozenset()) — no scanner-generated lines.
         source = textwrap.dedent("""\
@@ -562,10 +531,6 @@ class TestScanParseIntegration:
     def test_line_continuation_no_duplicate_diagnostics() -> None:
         """Scanner-generated unparsable cells should produce only
         one diagnostic (MB001), not a duplicate from MF001."""
-        from marimo._ast.parse import parse_notebook
-        from marimo._lint.rule_engine import RuleEngine
-        from marimo._schemas.serialization import UnparsableCell
-
         source = textwrap.dedent("""\
             import marimo
             __generated_with = "0.1.0"
@@ -605,10 +570,6 @@ class TestScanParseIntegration:
         The file declares ASCII encoding but has a Latin-1 byte (0xe9).
         Should load gracefully with errors, not crash.
         """
-        from pathlib import Path
-
-        from marimo._ast.load import get_notebook_status
-
         tmp = Path(str(tmp_path))
         filepath = tmp / "encoding_errors.py"
         # Write raw bytes: ASCII encoding declaration + Latin-1 byte 0xe9

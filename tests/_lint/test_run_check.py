@@ -1,6 +1,7 @@
 # Copyright 2026 Marimo. All rights reserved.
 """Unit tests for the run_check CLI integration."""
 
+import asyncio
 from pathlib import Path
 
 from marimo._lint import FileStatus, Linter, run_check
@@ -328,8 +329,6 @@ def __():
         # Test fixing (if notebook is available)
         if file_status.notebook is not None:
             # Use Linter.fix() method
-            import asyncio
-
             linter = Linter()
             result = asyncio.run(linter.fix(file_status))
             assert isinstance(result, bool)
