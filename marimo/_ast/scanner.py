@@ -549,8 +549,6 @@ def _build_unparsable_node(
     # Set line numbers
     ast.fix_missing_locations(node)
     ast.increment_lineno(node, start_line - 1)
-    # Mark as scanner-generated so parse_body can add a violation
-    node._scanner_generated = True  # type: ignore[attr-defined]
     return node
 
 
@@ -573,21 +571,27 @@ def _has_cell_boundaries(source: str) -> bool:
     )
 
 
-def scan_parse_fallback(source: str, filepath: str) -> list[ast.stmt]:
+def scan_parse_fallback(
+    source: str, filepath: str
+) -> tuple[list[ast.stmt], frozenset[int]]:
     """Fallback parser: scan for cell boundaries, parse each cell individually.
 
     Called when ast.parse() on the full file fails due to syntax errors.
-    Returns AST nodes with unparsable cells wrapped as app._unparsable_cell(),
-    or an empty list if no cell boundaries are found (caller should re-raise).
+    Returns a tuple of (nodes, scanner_generated_lines) where
+    scanner_generated_lines contains the 1-indexed start line numbers of
+    unparsable cells created by the scanner (vs. pre-existing
+    app._unparsable_cell() calls in the source).
+    Returns ([], frozenset()) if no cell boundaries are found.
     """
     from marimo._ast.parse import ast_parse
 
     if not _has_cell_boundaries(source):
-        return []
+        return [], frozenset()
 
     scan = scan_notebook(source)
 
     nodes: list[ast.stmt] = []
+    scanner_lines: set[int] = set()
 
     # Preamble
     if scan.preamble.strip():
@@ -605,12 +609,14 @@ def scan_parse_fallback(source: str, filepath: str) -> list[ast.stmt]:
             nodes.extend(cell_tree.body)
         except SyntaxError:
             inner_code = _extract_body_code(cell.source, cell.kind)
-            nodes.append(
-                _build_unparsable_node(inner_code, cell.name, cell.start_line)
+            node = _build_unparsable_node(
+                inner_code, cell.name, cell.start_line
             )
+            scanner_lines.add(node.lineno)
+            nodes.append(node)
 
     # Run guard
     if scan.run_guard_line is not None:
         nodes.append(_build_run_guard_node(scan.run_guard_line))
 
-    return nodes
+    return nodes, frozenset(scanner_lines)

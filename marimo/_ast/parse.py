@@ -511,6 +511,7 @@ class Parser:
     def __init__(self, contents: str, filepath: str = "<marimo>"):
         self.extractor = Extractor(contents=contents)
         self.filepath = filepath
+        self._scanner_generated_lines: frozenset[int] = frozenset()
 
     def node_stack(self) -> PeekStack[Node]:
         try:
@@ -522,13 +523,12 @@ class Parser:
             return PeekStack(iter(tree.body))
         except SyntaxError:
             # File has syntax errors — use scanner to recover individual cells.
-            nodes = _scan_parse_fallback(
+            # Never re-raise: parse_notebook must return a best-effort result
+            # so --watch and IPC are never broken by a syntax error.
+            nodes, scanner_lines = _scan_parse_fallback(
                 self.extractor.contents or "", self.filepath
             )
-            # If we cannot extract any cells, then raise the syntax error, as
-            # there's nothing we can do at all.
-            if not nodes:
-                raise
+            self._scanner_generated_lines = scanner_lines
             return PeekStack(iter(nodes))
 
     def parse_header(self, body: PeekStack[Node]) -> ParseResult[Header]:
@@ -676,8 +676,9 @@ class Parser:
                 cell = cell_result.unwrap()
                 # Scanner-generated unparsable cells indicate a syntax
                 # error in the original cell source.
-                if isinstance(cell, UnparsableCell) and getattr(
-                    node, "_scanner_generated", False
+                if (
+                    isinstance(cell, UnparsableCell)
+                    and node.lineno in self._scanner_generated_lines
                 ):
                     violations.append(
                         Violation(
@@ -1159,7 +1160,9 @@ def parse_notebook(
     )
 
 
-def _scan_parse_fallback(source: str, filepath: str) -> list[Node]:
+def _scan_parse_fallback(
+    source: str, filepath: str
+) -> tuple[list[Node], frozenset[int]]:
     """When ast.parse() fails, use scanner to recover individual cells."""
     from marimo._ast.scanner import scan_parse_fallback
 

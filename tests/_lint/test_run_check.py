@@ -64,7 +64,13 @@ def __():
         assert isinstance(result.files[0].diagnostics, list)
 
     def test_run_check_with_syntax_error(self, tmpdir):
-        """Test run_check with a file containing syntax errors."""
+        """Test run_check with a file containing syntax errors.
+
+        A file with a syntax error but no cell boundaries is not recognisable
+        as a marimo notebook, so the linter skips it gracefully rather than
+        failing hard.  Notebooks that DO have cell boundaries are recovered via
+        the scanner fallback and reported as diagnostics instead.
+        """
         bad_file = Path(tmpdir) / "bad.py"
         bad_file.write_text(
             "import marimo\napp = marimo.App(\ndef broken(:\n    pass"
@@ -73,9 +79,9 @@ def __():
         result = run_check((str(bad_file),))
 
         assert len(result.files) == 1
-        assert result.files[0].failed is True
-        assert "Failed to parse" in result.files[0].message
-        assert len(result.files[0].details) > 0
+        # File has no cell boundaries — treated as unrecognisable/empty
+        assert result.files[0].failed is False
+        assert result.files[0].skipped is True
 
     def test_run_check_with_glob_patterns(self, tmpdir):
         """Test run_check with glob patterns."""
@@ -329,10 +335,13 @@ def __():
             assert isinstance(result, bool)
 
     def test_error_handling_in_run_check(self, tmpdir):
-        """Test error handling in run_check."""
-        # Test by providing invalid content that will cause parsing to fail
+        """Test error handling in run_check.
+
+        A file with a syntax error but no @app.cell boundaries is not
+        recognisable as a marimo notebook.  The linter skips it gracefully;
+        notebooks with cell boundaries are recovered via the scanner fallback.
+        """
         test_file = Path(tmpdir) / "test.py"
-        # Write invalid Python content that will cause an exception
         test_file.write_text(
             "import marimo\napp = marimo.App()\ndef broken(:\n    pass"
         )
@@ -340,9 +349,9 @@ def __():
         result = run_check((str(test_file),))
 
         assert len(result.files) == 1
-        assert result.files[0].failed is True
-        # Note: errored might not be True as we changed error handling
-        assert "Failed to parse" in result.files[0].message
+        # File has no cell boundaries — treated as empty/unrecognisable
+        assert result.files[0].failed is False
+        assert result.files[0].skipped is True
 
     def test_run_check_with_nonexistent_file_pattern(self):
         """Test run_check with a specific nonexistent file."""
